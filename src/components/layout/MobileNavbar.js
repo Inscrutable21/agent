@@ -5,7 +5,9 @@ export default function MobileNavbar({
   isMobileMenuOpen, 
   setIsMobileMenuOpen, 
   isDarkMode, 
-  toggleDarkMode 
+  toggleDarkMode,
+  user,
+  onLogout
 }) {
   const [mounted, setMounted] = useState(false);
 
@@ -27,28 +29,21 @@ export default function MobileNavbar({
           <div className="space-y-1">
             <Link 
               href="/" 
-              className="block px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
+              className="block px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-yellow-500 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
               onClick={closeMobileMenu}
             >
               Home
             </Link>
             <Link 
-              href="/blog" 
-              className="block px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
+              href="/services" 
+              className="block px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-yellow-500 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
               onClick={closeMobileMenu}
             >
-              Blog
-            </Link>
-            <Link 
-              href="/about" 
-              className="block px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
-              onClick={closeMobileMenu}
-            >
-              About
+              Services
             </Link>
             <Link 
               href="/contact" 
-              className="block px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
+              className="block px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-yellow-500 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
               onClick={closeMobileMenu}
             >
               Contact
@@ -57,34 +52,56 @@ export default function MobileNavbar({
           
           {/* Mobile Action Links */}
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-1">
-            <Link 
-              href="/wishlist" 
-              className="flex items-center px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
-              onClick={closeMobileMenu}
-            >
-              <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-              </svg>
-              Wishlist
-            </Link>
-            
-            <Link 
-              href="/account" 
-              className="flex items-center px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
-              onClick={closeMobileMenu}
-            >
-              <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              Account
-            </Link>
+            {user ? (
+              <>
+                <div className="px-3 py-2 text-gray-800 dark:text-gray-200 text-base font-semibold">
+                  Welcome, {user.name}
+                </div>
+                <button
+                  onClick={() => {
+                    onLogout();
+                    closeMobileMenu();
+                  }}
+                  className="flex items-center w-full px-3 py-3 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 text-base font-semibold transition-colors rounded-md"
+                >
+                  <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link 
+                  href="/login" 
+                  className="flex items-center px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-yellow-500 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
+                  onClick={closeMobileMenu}
+                >
+                  <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                  </svg>
+                  Login
+                </Link>
+                
+                <Link 
+                  href="/signup" 
+                  className="flex items-center px-3 py-3 text-white bg-yellow-500 hover:bg-yellow-600 text-base font-semibold transition-colors rounded-md mx-3"
+                  onClick={closeMobileMenu}
+                >
+                  <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                  Sign Up
+                </Link>
+              </>
+            )}
             
             <button
               onClick={() => {
                 toggleDarkMode();
                 closeMobileMenu();
               }}
-              className="flex items-center w-full px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
+              className="flex items-center w-full px-3 py-3 text-gray-800 dark:text-gray-200 hover:text-yellow-500 hover:bg-gray-50 dark:hover:bg-gray-800 text-base font-semibold transition-colors rounded-md"
             >
               {mounted ? (
                 isDarkMode ? (

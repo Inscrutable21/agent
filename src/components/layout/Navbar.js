@@ -1,79 +1,227 @@
-'use client';
-
-import Link from 'next/link';
-import Image from 'next/image';
-import { useState, useEffect } from 'react';
-import { useTheme } from 'next-themes';
-import MobileNavbar from './MobileNavbar';
-
-// ... (SunIcon and MoonIcon components can remain here)
-
-const SunIcon = (props) => (
-  <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-);
-const MoonIcon = (props) => (
-  <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-);
-
+'use client'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
+import Link from 'next/link'
+import { useQATracking } from '../../hooks/useQATracking'
 
 export default function Navbar() {
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false)
+  const [user, setUser] = useState(null)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const { theme, setTheme } = useTheme()
+  const router = useRouter()
+  const { trackUserAction, trackNavigation } = useQATracking('Navigation System')
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    setMounted(true)
+    
+    // Check if user is logged in
+    const userData = localStorage.getItem('userData')
+    if (userData) {
+      setUser(JSON.parse(userData))
+    }
+  }, [])
+
+  const handleLogout = async () => {
+    try {
+      // Track logout action
+      await trackUserAction('logout_click', 'logout_button', { userId: user?.id })
+      
+      const userData = localStorage.getItem('userData')
+      const userObj = userData ? JSON.parse(userData) : null
+      
+      // Call logout API
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userObj?.id,
+          email: userObj?.email
+        }),
+      })
+      
+      localStorage.removeItem('userData')
+      setUser(null)
+      router.push('/')
+    } catch (error) {
+      console.error('Logout error:', error)
+      localStorage.removeItem('userData')
+      setUser(null)
+      router.push('/')
+    }
+  }
+
+  const toggleDarkMode = async () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark'
+    setTheme(newTheme)
+    
+    // Track theme change
+    await trackUserAction('theme_toggle', 'theme_button', { 
+      from: theme, 
+      to: newTheme 
+    })
+  }
+
+  const handleNavClick = async (href, linkText) => {
+    await trackNavigation(href, 'navbar_click')
+    await trackUserAction('nav_click', 'nav_link', { href, text: linkText })
+  }
+
+  if (!mounted) return null
 
   return (
-    <nav className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 transition-colors duration-300">
+    <nav className="bg-white dark:bg-gray-900 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16 sm:h-20">
-          {/* Logo */}
-          <div className="flex-shrink-0">
-            <Link href="/" className="flex items-center">
-              <Image src="/logo.jpg" alt="Logo" width={120} height={40} className="h-6 sm:h-8 w-auto" priority />
+        <div className="flex justify-between h-16">
+          <div className="flex items-center">
+            <Link 
+              href="/" 
+              className="flex-shrink-0 flex items-center"
+              onClick={() => handleNavClick('/', 'Home')}
+            >
+              <span className="text-2xl font-bold text-yellow-500">SEPJO</span>
             </Link>
           </div>
 
-          {/* Desktop Navigation Links */}
           <div className="hidden md:flex items-center space-x-8">
-            <Link href="/" className="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 text-base font-semibold transition-colors duration-200 px-3 py-2">Home</Link>
-            <Link href="/blog" className="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 text-base font-semibold transition-colors duration-200 px-3 py-2">Blog</Link>
-            <Link href="/about" className="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 text-base font-semibold transition-colors duration-200 px-3 py-2">About</Link>
-            <Link href="/contact" className="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 text-base font-semibold transition-colors duration-200 px-3 py-2">Contact</Link>
+            <Link
+              href="/categories"
+              className="text-gray-700 dark:text-gray-300 hover:text-yellow-500 transition-colors"
+              onClick={() => handleNavClick('/categories', 'Categories')}
+            >
+              Categories
+            </Link>
+            <Link
+              href="/billboards"
+              className="text-gray-700 dark:text-gray-300 hover:text-yellow-500 transition-colors"
+              onClick={() => handleNavClick('/billboards', 'Billboards')}
+            >
+              Billboards
+            </Link>
+
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleDarkMode}
+              className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-yellow-500 transition-colors"
+              aria-label="Toggle dark mode"
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+
+            {/* User Authentication */}
+            {user ? (
+              <div className="flex items-center space-x-4">
+                <span className="text-gray-700 dark:text-gray-300">
+                  Welcome, {user.name}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-4">
+                <Link
+                  href="/login"
+                  className="text-gray-700 dark:text-gray-300 hover:text-yellow-500 transition-colors"
+                  onClick={() => handleNavClick('/login', 'Login')}
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/signup"
+                  className="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition-colors"
+                  onClick={() => handleNavClick('/signup', 'Sign Up')}
+                >
+                  Sign Up
+                </Link>
+              </div>
+            )}
           </div>
 
-          {/* Desktop Right Side */}
-          <div className="hidden md:flex items-center space-x-4">
-             <Link href="/wishlist" className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors p-2" aria-label="Wishlist"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg></Link>
-             <Link href="/cart" className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors p-2 relative" aria-label="Shopping Cart"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg><span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">0</span></Link>
-             <Link href="/account" className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors p-2" aria-label="Account"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg></Link>
-             <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors p-2" aria-label="Toggle dark mode">
-               {mounted ? ( theme === 'dark' ? <SunIcon className="w-6 h-6" /> : <MoonIcon className="w-6 h-6" />) : (<div className="w-6 h-6" />)}
-             </button>
-           </div>
-          
-          {/* Mobile Icons */}
-          <div className="md:hidden flex items-center space-x-2">
-            <Link href="/wishlist" className="text-gray-700 dark:text-gray-300 p-2" aria-label="Wishlist"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg></Link>
-            <Link href="/cart" className="text-gray-700 dark:text-gray-300 p-2 relative" aria-label="Shopping Cart"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg><span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">0</span></Link>
-            <Link href="/account" className="text-gray-700 dark:text-gray-300 p-2" aria-label="Account"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg></Link>
-
-            {/* Mobile Hamburger Menu */}
-            <button type="button" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-gray-700 dark:text-gray-300 p-2 rounded-md" aria-label="Toggle menu">
-              <div className="w-5 h-5 flex flex-col justify-center items-center"><span className={`block w-5 h-0.5 bg-current transition-all duration-300 ${isMobileMenuOpen ? 'rotate-45 translate-y-1' : '-translate-y-1'}`}></span><span className={`block w-5 h-0.5 bg-current transition-all duration-300 ${isMobileMenuOpen ? 'opacity-0' : 'opacity-100'}`}></span><span className={`block w-5 h-0.5 bg-current transition-all duration-300 ${isMobileMenuOpen ? '-rotate-45 -translate-y-1' : 'translate-y-1'}`}></span></div>
+          {/* Mobile menu button */}
+          <div className="md:hidden flex items-center">
+            <button
+              onClick={async () => {
+                setIsMobileMenuOpen(!isMobileMenuOpen)
+                await trackUserAction('mobile_menu_toggle', 'mobile_menu_button', { 
+                  isOpen: !isMobileMenuOpen 
+                })
+              }}
+              className="text-gray-700 dark:text-gray-300 hover:text-yellow-500"
+            >
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
             </button>
           </div>
         </div>
 
-        <MobileNavbar 
-          isMobileMenuOpen={isMobileMenuOpen}
-          setIsMobileMenuOpen={setIsMobileMenuOpen}
-          isDarkMode={theme === 'dark'}
-          toggleDarkMode={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        />
+        {/* Mobile menu */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden">
+            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+              <Link
+                href="/categories"
+                className="block px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-yellow-500"
+                onClick={() => {
+                  handleNavClick('/categories', 'Categories (Mobile)')
+                  setIsMobileMenuOpen(false)
+                }}
+              >
+                Categories
+              </Link>
+              <Link
+                href="/billboards"
+                className="block px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-yellow-500"
+                onClick={() => {
+                  handleNavClick('/billboards', 'Billboards (Mobile)')
+                  setIsMobileMenuOpen(false)
+                }}
+              >
+                Billboards
+              </Link>
+              {user ? (
+                <button
+                  onClick={() => {
+                    handleLogout()
+                    setIsMobileMenuOpen(false)
+                  }}
+                  className="block w-full text-left px-3 py-2 text-red-600 hover:text-red-700"
+                >
+                  Logout
+                </button>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="block px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-yellow-500"
+                    onClick={() => {
+                      handleNavClick('/login', 'Login (Mobile)')
+                      setIsMobileMenuOpen(false)
+                    }}
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="block px-3 py-2 text-yellow-500 hover:text-yellow-600"
+                    onClick={() => {
+                      handleNavClick('/signup', 'Sign Up (Mobile)')
+                      setIsMobileMenuOpen(false)
+                    }}
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </nav>
-  );
+  )
 }

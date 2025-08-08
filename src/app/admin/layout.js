@@ -1,4 +1,5 @@
 'use client'
+
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import AdminSidebar from '../../components/admin/AdminSidebar'
@@ -7,52 +8,23 @@ export default function AdminLayout({ children }) {
   const [admin, setAdmin] = useState(null)
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    if (!mounted) return
-
-    // Skip auth check for login page
-    if (pathname === '/admin/login') {
-      setLoading(false)
-      return
-    }
-
-    // Check if admin is logged in
-    const token = localStorage.getItem('adminToken')
     const adminData = localStorage.getItem('adminData')
-
-    if (!token || !adminData) {
-      router.push('/admin/login')
-      return
-    }
-
-    try {
+    if (adminData) {
       setAdmin(JSON.parse(adminData))
-    } catch (error) {
-      console.error('Error parsing admin data:', error)
+    } else if (pathname !== '/admin/login') {
       router.push('/admin/login')
-      return
     }
-
     setLoading(false)
-  }, [router, pathname, mounted])
+  }, [router, pathname])
 
   const handleLogout = () => {
-    localStorage.removeItem('adminToken')
     localStorage.removeItem('adminData')
+    setAdmin(null)
     router.push('/admin/login')
-  }
-
-  // Don't render anything until mounted (prevents hydration mismatch)
-  if (!mounted) {
-    return null
   }
 
   // Show loading spinner
@@ -64,23 +36,43 @@ export default function AdminLayout({ children }) {
     )
   }
 
-  // Show login page without sidebar
+  // Show login page without sidebar and navbar
   if (pathname === '/admin/login') {
-    return <>{children}</>
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        {children}
+      </div>
+    )
   }
 
-  // Show admin panel with sidebar
+  // Show admin panel with sidebar (no main navbar)
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <AdminSidebar 
-        admin={admin}
-        sidebarOpen={sidebarOpen}
-        setSidebarOpen={setSidebarOpen}
-        onLogout={handleLogout}
-      />
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
+      {/* Sidebar */}
+      <div className="hidden lg:flex lg:flex-shrink-0">
+        <AdminSidebar 
+          admin={admin}
+          onLogout={handleLogout}
+        />
+      </div>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
+          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-gray-800">
+            <AdminSidebar 
+              admin={admin}
+              onLogout={handleLogout}
+              mobile={true}
+              onClose={() => setSidebarOpen(false)}
+            />
+          </div>
+        </div>
+      )}
       
       {/* Main content */}
-      <div className="lg:pl-64">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile header */}
         <div className="lg:hidden bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between px-4 py-3">
@@ -93,23 +85,22 @@ export default function AdminLayout({ children }) {
               </svg>
             </button>
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Admin Panel</h1>
-            <div></div>
+            <button
+              onClick={handleLogout}
+              className="text-red-600 hover:text-red-700 text-sm font-medium"
+            >
+              Logout
+            </button>
           </div>
         </div>
 
         {/* Page content */}
-        <main className="p-4 lg:p-8">
-          {children}
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-4 lg:p-8">
+            {children}
+          </div>
         </main>
       </div>
-
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        ></div>
-      )}
     </div>
   )
 }

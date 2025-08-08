@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import AnalyticsDashboard from '../../../components/admin/AnalyticsDashboard'
 
 export default function AdminDashboard() {
   const [admin, setAdmin] = useState(null)
@@ -101,6 +102,12 @@ export default function AdminDashboard() {
               Configure website settings and preferences
             </p>
           </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            User Analytics
+          </h3>
+          <AnalyticsDashboard />
         </div>
       </div>
     </div>

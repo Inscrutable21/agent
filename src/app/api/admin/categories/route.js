@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../../lib/prisma'
+import { triggerQAOnContentChange } from '../../../../lib/qaAutoTrigger'
 
 export async function GET() {
   try {
@@ -38,17 +39,36 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { name, comingSoon } = await request.json()
+    const { name, comingSoon = false } = await request.json()
 
     const category = await prisma.category.create({
-      data: { 
-        name,
-        comingSoon: comingSoon || false
+      data: { name, comingSoon },
+      include: {
+        subCategories: true,
+        _count: {
+          select: { billboards: true }
+        }
       }
     })
 
+    // Auto-trigger QA for new category
+    try {
+      await triggerQAOnContentChange(
+        `/categories/${category.id}`,
+        JSON.stringify({
+          name: category.name,
+          comingSoon: category.comingSoon
+        }),
+        'category_created'
+      )
+      console.log(`QA auto-triggered for new category: ${category.name}`)
+    } catch (qaError) {
+      console.error('QA auto-trigger failed:', qaError)
+    }
+
     return NextResponse.json({ category })
   } catch (error) {
+    console.error('Category creation error:', error)
     return NextResponse.json(
       { error: 'Failed to create category' },
       { status: 500 }

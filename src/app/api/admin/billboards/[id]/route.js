@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../../../lib/prisma'
+import { triggerQAOnContentChange } from '../../../../../lib/qaAutoTrigger'
 
 export async function PUT(request, { params }) {
   try {
@@ -33,6 +34,25 @@ export async function PUT(request, { params }) {
         subCategory: true
       }
     })
+
+    // Auto-trigger QA for updated billboard
+    try {
+      await triggerQAOnContentChange(
+        `/billboards/${billboard.id}`,
+        JSON.stringify({
+          title: billboard.title,
+          description: billboard.description,
+          category: billboard.category?.name,
+          city: billboard.city?.name,
+          pricing: billboard.pricing,
+          location: billboard.location
+        }),
+        'billboard_updated'
+      )
+      console.log(`QA auto-triggered for updated billboard: ${billboard.title}`)
+    } catch (qaError) {
+      console.error('QA auto-trigger failed:', qaError)
+    }
 
     return NextResponse.json({ billboard })
   } catch (error) {

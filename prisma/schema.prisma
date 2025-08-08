@@ -80,6 +80,197 @@ model Billboard {
   @@map("billboards")
 }
 
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastLogin DateTime?
+  
+  analytics UserAnalytics[]
 
+  @@map("users")
+}
 
+model UserAnalytics {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?  @db.ObjectId
+  sessionId String
+  page      String
+  action    String   // 'page_view', 'click', 'search', 'contact_form', etc.
+  element   String?  // button clicked, link clicked, etc.
+  data      Json?    // additional data like search terms, form data, etc.
+  timestamp DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+  device    String?  // mobile, desktop, tablet
+  browser   String?
+  location  Json?    // city, country data
 
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("user_analytics")
+}
+
+model PageViews {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  page      String
+  views     Int      @default(1)
+  date      DateTime @default(now())
+  
+  @@unique([page, date])
+  @@map("page_views")
+}
+
+model SyntheticPersona {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  personaId       String   @unique
+  name            String
+  title           String?
+  company         String?
+  segment         String
+  demographics    Json
+  business        Json
+  advertising     Json
+  behavior        Json
+  psychographics  Json?
+  digitalBehavior Json?
+  challenges      String[]
+  opportunities   String[]
+  uniqueTraits    String[]
+  status          String   @default("active")
+  batchNumber     Int?
+  generatedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("synthetic_personas")
+}
+
+model QARequirement {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  requirementId   String   @unique
+  title           String
+  description     String
+  userStories     Json[]   // Array of user stories
+  acceptanceCriteria Json[] // Array of acceptance criteria
+  feature         String
+  priority        String   // "critical", "high", "medium", "low"
+  riskLevel       String   // "critical", "high", "medium", "low"
+  businessImpact  String   // "critical", "high", "medium", "low"
+  status          String   @default("active") // "active", "deprecated", "completed"
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  testCases       QATestCase[]
+  
+  @@map("qa_requirements")
+}
+
+model QATestCase {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  testId                String   @unique
+  title                 String
+  description           String
+  testType              String   // "functional", "positive", "negative", "edge", "integration", "security", "performance"
+  category              String?  // "positive", "negative", "edge", "integration", "security", "performance"
+  priority              String   // "critical", "high", "medium", "low"
+  riskScore             Float?   // 1-10 risk assessment score
+  businessImpact        String?  // "critical", "high", "medium", "low"
+  automationFeasibility String?  // "high", "medium", "low"
+  status                String   @default("pending") // "pending", "running", "passed", "failed"
+  steps                 Json[]   // Array of test steps
+  assertions            Json[]   // Expected outcomes
+  testData              Json?    // Required test data
+  prerequisites         Json[]   // Test prerequisites
+  metadata              Json     // Additional test data including risk factors
+  pageUrl               String?
+  component             String?
+  requirementId         String?  @db.ObjectId
+  generatedBy           String   @default("ai")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  requirement           QARequirement? @relation(fields: [requirementId], references: [id])
+  testResults           QATestResult[]
+  
+  @@map("qa_test_cases")
+}
+
+model QATestResult {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  testCaseId String   @db.ObjectId
+  testCase   QATestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  
+  status     String   // "passed", "failed", "skipped"
+  duration   Int      // in milliseconds
+  errors     Json[]   // Error details if failed
+  screenshots String[] // Screenshot URLs
+  logs       Json[]   // Execution logs
+  runAt      DateTime @default(now())
+  
+  @@map("qa_test_results")
+}
+
+model QAIssue {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  issueId     String   @unique
+  type        String   // "brand", "broken_link", "instrumentation", "performance"
+  severity    String   // "critical", "high", "medium", "low"
+  title       String
+  description String
+  pageUrl     String
+  element     String?
+  screenshot  String?
+  status      String   @default("open") // "open", "in_progress", "resolved", "ignored"
+  detectedAt  DateTime @default(now())
+  resolvedAt  DateTime?
+  
+  @@map("qa_issues")
+}
+
+model QAAutoTrigger {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  triggerId       String   @unique
+  pageUrl         String
+  changeType      String   // "create", "update", "delete"
+  testsGenerated  Int      @default(0)
+  issuesDetected  Int      @default(0)
+  status          String   @default("pending") // "pending", "running", "completed", "failed"
+  triggeredAt     DateTime @default(now())
+  completedAt     DateTime?
+  
+  @@map("qa_auto_triggers")
+}
+
+model QARiskAssessment {
+  id                   String   @id @default(auto()) @map("_id") @db.ObjectId
+  assessmentId         String   @unique
+  feature              String
+  overallRiskScore     Float    // 1-10
+  businessContext      String
+  releaseTimeline      String
+  criticalTests        Int      @default(0)
+  highPriorityTests    Int      @default(0)
+  mediumPriorityTests  Int      @default(0)
+  lowPriorityTests     Int      @default(0)
+  recommendations      Json[]   // Risk mitigation recommendations
+  createdAt            DateTime @default(now())
+  
+  @@map("qa_risk_assessments")
+}
+
+model WorkflowSimulation {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId     String   @unique
+  workflowType  String
+  personaCount  Int
+  results       Json[]   // Array of simulation results
+  discrepancies Json[]   // Array of discrepancies found
+  summary       Json     // Summary statistics
+  status        String   @default("running") // "running", "completed", "failed"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

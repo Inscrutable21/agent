@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 const services = [
   {
-    title: 'Social Media Advertising',
+    title: 'Social',
     imageUrl: '/images/services/social-media.jpg',
     href: '/billboards?categoryId=social-media'
   },

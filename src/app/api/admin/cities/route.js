@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../../lib/prisma'
+import { triggerQAOnContentChange } from '../../../../lib/qaAutoTrigger'
 
 export async function GET() {
   try {
@@ -24,15 +25,11 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { name, state, country } = await request.json()
+    const { name, state, country = 'India' } = await request.json()
 
     // Check if city already exists
     const existingCity = await prisma.city.findFirst({
-      where: {
-        name: name,
-        state: state,
-        country: country || 'India'
-      }
+      where: { name, state, country }
     })
 
     if (existingCity) {
@@ -43,12 +40,29 @@ export async function POST(request) {
     }
 
     const city = await prisma.city.create({
-      data: {
-        name,
-        state,
-        country: country || 'India'
+      data: { name, state, country },
+      include: {
+        _count: {
+          select: { billboards: true }
+        }
       }
     })
+
+    // Auto-trigger QA for new city
+    try {
+      await triggerQAOnContentChange(
+        `/cities/${city.id}`,
+        JSON.stringify({
+          name: city.name,
+          state: city.state,
+          country: city.country
+        }),
+        'city_created'
+      )
+      console.log(`QA auto-triggered for new city: ${city.name}`)
+    } catch (qaError) {
+      console.error('QA auto-trigger failed:', qaError)
+    }
 
     return NextResponse.json({ city })
   } catch (error) {
