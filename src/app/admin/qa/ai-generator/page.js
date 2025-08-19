@@ -7,13 +7,16 @@ import {
   ExclamationTriangleIcon,
   CheckCircleIcon,
   ClockIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  PlayIcon
 } from '@heroicons/react/24/outline'
 
 export default function AITestGenerator() {
   const [activeTab, setActiveTab] = useState('requirements')
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState(null)
+  const [executing, setExecuting] = useState(false)
+  const [executionResults, setExecutionResults] = useState(null)
   
   // Form states
   const [requirements, setRequirements] = useState('')
@@ -124,6 +127,58 @@ export default function AITestGenerator() {
       }
     } catch (error) {
       console.error('Smart generation error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const executeAllTests = async () => {
+    setExecuting(true)
+    try {
+      const response = await fetch('/api/admin/qa/execute-all-tests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ concurrency: 5 }) // run in parallel with 5 workers
+      })
+      
+      const data = await response.json()
+      if (data.success) {
+        setExecutionResults(data.results)
+        // Refresh results to show updated statuses
+        await fetchTestResults()
+      }
+    } catch (error) {
+      console.error('Execution error:', error)
+    } finally {
+      setExecuting(false)
+    }
+  }
+
+  const fetchTestResults = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/admin/qa/ingest-requirements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requirements,
+          userStories: userStories.filter(story => story.trim()),
+          feature,
+          priority,
+          riskLevel
+        })
+      })
+      
+      const data = await response.json()
+      if (data.success) {
+        setResults(data)
+        setActiveTab('results')
+      } else {
+        alert('Failed to generate test cases: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Error:', error)
+      alert('Failed to generate test cases')
     } finally {
       setLoading(false)
     }
@@ -613,7 +668,49 @@ export default function AITestGenerator() {
             </div>
           </div>
         )}
+
+        {/* Add execution button */}
+        <button
+          onClick={executeAllTests}
+          disabled={executing || !results?.testCases?.length}
+          className={`px-6 py-2 rounded-md flex items-center space-x-2 transition-all ${
+            executing || !results?.testCases?.length
+              ? 'bg-gray-400 cursor-not-allowed opacity-50'
+              : 'bg-green-600 hover:bg-green-700 cursor-pointer'
+          } text-white`}
+        >
+          <PlayIcon className="h-4 w-4" />
+          <span>{executing ? 'Executing Tests...' : 'Execute All Tests'}</span>
+        </button>
+        {executionResults && (
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h3 className="font-semibold mb-2">Execution Results</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>Mode: <span className="font-medium">{executionResults.mode}</span></div>
+              <div>Concurrency: <span className="font-medium">{executionResults.concurrency}</span></div>
+              <div>Wall Time: <span className="font-medium">{Math.round(executionResults.durationMs/100)/10}s</span></div>
+              <div>Total: {executionResults.total} • <span className="text-green-600">Passed: {executionResults.passed}</span> • <span className="text-red-600">Failed: {executionResults.failed}</span></div>
+            </div>
+            <div className="mt-3">
+              <div className="text-xs text-gray-600 mb-1">Sample details (showing up to 5):</div>
+              <div className="text-xs bg-white rounded border divide-y">
+                {(executionResults.details || []).slice(0, 5).map((d, i) => (
+                  <div key={i} className="p-2 flex items-center justify-between">
+                    <div className="truncate mr-2">{d.title || d.testId}</div>
+                    <div className="flex items-center space-x-3">
+                      <span className={`px-2 py-0.5 rounded ${d.status === 'passed' ? 'bg-green-100 text-green-700' : d.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {d.status}
+                      </span>
+                      <span className="text-gray-500">{d.executionTime}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
 }
+

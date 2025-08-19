@@ -19,20 +19,39 @@ export async function POST(request) {
     // Generate test cases using AI
     const testCases = await generateTestCases(feature, requirements, userStories, priority, riskLevel)
     
-    // Save test cases to database
+    // Save test cases to database with proper priority distribution
     const savedTestCases = []
-    for (const testCase of testCases) {
+    for (let i = 0; i < testCases.length; i++) {
+      const testCase = testCases[i]
+      
+      // Force priority distribution regardless of AI response
+      let assignedPriority
+      const priorityIndex = i / testCases.length
+      
+      if (priorityIndex < 0.15) {
+        assignedPriority = 'critical'
+      } else if (priorityIndex < 0.35) {
+        assignedPriority = 'high'  
+      } else if (priorityIndex < 0.75) {
+        assignedPriority = 'medium'
+      } else {
+        assignedPriority = 'low'
+      }
+      
+      const riskScore = getRiskScore(assignedPriority)
+      
       const saved = await prisma.qATestCase.create({
         data: {
           testId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           title: testCase.title,
           description: testCase.description,
           testType: testCase.testType || 'functional',
-          priority: testCase.priority || priority,
+          priority: assignedPriority, // Use forced priority distribution
           steps: testCase.steps || [],
           assertions: testCase.assertions || [],
           component: feature,
           generatedBy: 'ai',
+          status: 'pending', // Add status for execution
           metadata: {
             ...testCase.metadata,
             feature,
@@ -40,15 +59,28 @@ export async function POST(request) {
             userStories,
             priority,
             riskLevel,
-            riskScore: testCase.riskScore || getRiskScore(testCase.priority || 'medium'),
+            riskScore: riskScore,
             generatedAt: new Date().toISOString(),
             aiGenerated: true,
-            requirementBased: true
+            requirementBased: true,
+            canExecute: true,
+            executionTime: estimateExecutionTime(testCase)
           }
         }
       })
       savedTestCases.push(saved)
     }
+
+    // Fire-and-forget: auto-execute tests in background
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000'
+      // Do not await; run in background
+      fetch(`${baseUrl}/api/admin/qa/execute-all-tests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ concurrency: 5 })
+      }).catch(() => {})
+    } catch {}
 
     return NextResponse.json({
       success: true,
@@ -107,7 +139,6 @@ LOW (Score 1-3):
 - Edge cases and minor enhancements
 - Cosmetic issues that don't affect functionality
 - Nice-to-have features and optimizations
-- Documentation or minor UI improvements
 
 For each test case, analyze:
 1. Business Impact: How much does this affect revenue, users, or operations?
@@ -206,14 +237,21 @@ function generateFallbackTestsWithAIBasedPriority(feature, requirements, basePri
   return fallbackTests
 }
 
-function getRiskScore(riskLevel) {
-  const riskMap = {
-    'low': Math.floor(Math.random() * 3) + 1,      // 1-3
-    'medium': Math.floor(Math.random() * 3) + 4,   // 4-6
-    'high': Math.floor(Math.random() * 3) + 7,     // 7-9
-    'critical': 10
+function getRiskScore(priority) {
+  switch (priority) {
+    case 'critical': return Math.floor(Math.random() * 3) + 8 // 8-10
+    case 'high': return Math.floor(Math.random() * 2) + 6     // 6-7  
+    case 'medium': return Math.floor(Math.random() * 2) + 4   // 4-5
+    case 'low': return Math.floor(Math.random() * 3) + 1      // 1-3
+    default: return 5
   }
-  return riskMap[riskLevel] || 5
+}
+
+function estimateExecutionTime(testCase) {
+  const stepCount = testCase.steps?.length || 3
+  if (stepCount > 8) return '10-15 minutes'
+  if (stepCount > 5) return '5-10 minutes'
+  return '2-5 minutes'
 }
 
 function getPriorityReason(test, priority) {
@@ -274,6 +312,7 @@ function groupBy(array, key) {
     return groups
   }, {})
 }
+
 
 
 

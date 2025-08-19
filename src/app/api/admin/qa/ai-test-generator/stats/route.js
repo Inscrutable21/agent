@@ -41,33 +41,28 @@ export async function GET() {
         }).length
       }),
       
-      // Calculate average risk score from metadata
+      // Calculate average risk score (prefer top-level field, fallback to metadata)
       prisma.qATestCase.findMany({
-        where: {
-          generatedBy: 'ai',
-          metadata: {
-            not: null
-          }
-        },
-        select: {
-          metadata: true
-        }
+        where: { generatedBy: 'ai' },
+        select: { riskScore: true, metadata: true }
       }).then(testCases => {
-        const riskScores = testCases
+        const scores = testCases
           .map(tc => {
+            if (typeof tc.riskScore === 'number' && !Number.isNaN(tc.riskScore)) {
+              return tc.riskScore
+            }
             try {
-              const metadata = typeof tc.metadata === 'string' 
-                ? JSON.parse(tc.metadata) 
-                : tc.metadata
-              return metadata?.riskScore || metadata?.risk || 0
+              const meta = typeof tc.metadata === 'string' ? JSON.parse(tc.metadata) : tc.metadata
+              const m = meta?.riskScore ?? meta?.risk
+              return typeof m === 'number' ? m : 0
             } catch {
               return 0
             }
           })
-          .filter(score => score > 0)
-        
-        return riskScores.length > 0 
-          ? riskScores.reduce((sum, score) => sum + score, 0) / riskScores.length
+          .filter(n => n > 0)
+
+        return scores.length
+          ? (scores.reduce((a, b) => a + b, 0) / scores.length)
           : 0
       }),
       
@@ -96,7 +91,7 @@ export async function GET() {
       stats: {
         totalRequirements,
         totalTestCases,
-        avgRiskScore: Number(avgRiskScore.toFixed(1)),
+        avgRiskScore: Number((avgRiskScore || 0).toFixed(1)),
         lastGenerated: lastGenerated?.createdAt || null
       }
     })
@@ -109,4 +104,3 @@ export async function GET() {
     )
   }
 }
-
