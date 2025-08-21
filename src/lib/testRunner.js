@@ -25,11 +25,26 @@ function joinUrl(base, path) {
 }
 
 export async function executeTestCaseReal(testCase) {
-  // If browser steps provided, use CDP runner
+  // Prefer CDP when possible:
+  // 1) Explicit browserSteps
   if (testCase?.metadata?.browserSteps && Array.isArray(testCase.metadata.browserSteps) && testCase.metadata.browserSteps.length > 0) {
     return await runBrowserTest(testCase.metadata)
   }
+  // 2) Fallback CDP if pageUrl exists (auto-construct basic steps)
+  if (testCase?.pageUrl) {
+    const meta = {
+      pageUrl: testCase.pageUrl,
+      action: 'page_load',
+      browserSteps: [
+        { action: 'goto', url: testCase.pageUrl },
+        { action: 'wait_for_selector', selector: 'body' }
+      ],
+      stopOnFirstFailure: true
+    }
+    return await runBrowserTest(meta)
+  }
 
+  // 3) HTTP runner only if neither browserSteps nor pageUrl exist but httpRequests provided
   const startedAt = Date.now()
   const logs = []
   let status = 'passed'
@@ -37,7 +52,6 @@ export async function executeTestCaseReal(testCase) {
 
   const baseUrl = resolveBaseUrl()
 
-  // Helper to run a single HTTP step
   const runHttp = async (step) => {
     const method = (step.method || 'GET').toUpperCase()
     const url = joinUrl(baseUrl, step.url || testCase.pageUrl || '/')
@@ -49,7 +63,11 @@ export async function executeTestCaseReal(testCase) {
     let responseText = null
     let respStatus = 0
     try {
-      const resp = await fetch(url, { method, headers, body, cache: 'no-store' })
+      const controller = new AbortController()
+      const timeoutMs = Number(process.env.QA_HTTP_TIMEOUT_MS || 15000)
+      const timeout = setTimeout(() => controller.abort(), timeoutMs)
+      const resp = await fetch(url, { method, headers, body, cache: 'no-store', signal: controller.signal })
+      clearTimeout(timeout)
       respStatus = resp.status
       responseText = await resp.text()
       if (step.expect?.status && resp.status !== step.expect.status) {
@@ -66,7 +84,7 @@ export async function executeTestCaseReal(testCase) {
       }
     } catch (e) {
       ok = false
-      error = e?.message || 'Request failed'
+      error = e?.name === 'AbortError' ? `Request timeout after ${process.env.QA_HTTP_TIMEOUT_MS || 15000}ms` : (e?.message || 'Request failed')
     }
     const t1 = Date.now()
     logs.push({
@@ -90,11 +108,9 @@ export async function executeTestCaseReal(testCase) {
       await runHttp(step)
       if (status === 'failed' && testCase?.metadata?.stopOnFirstFailure) break
     }
-  } else if (testCase.pageUrl) {
-    await runHttp({ method: 'GET', url: testCase.pageUrl, expect: { status: 200 } })
   } else {
     status = 'failed'
-    firstError = 'No executable URL or httpRequests/browserSteps metadata to run'
+    firstError = 'No executable pageUrl/browserSteps/httpRequests to run'
     logs.push({ type: 'info', message: firstError })
   }
 

@@ -28,6 +28,25 @@ export async function POST(request) {
     let testData = null
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
     
+    // Before generating, skip if tests already exist for this page
+    try {
+      if (pageUrl) {
+        const existingCount = await prisma.qATestCase.count({ where: { pageUrl } })
+        if (existingCount > 0) {
+          return NextResponse.json({
+            success: true,
+            message: 'Tests already exist for this pageUrl. Skipping auto-generation.',
+            pageUrl,
+            component,
+            changeType,
+            testData: { generated: 0, testCases: existingCount }
+          })
+        }
+      }
+    } catch (e) {
+      console.warn('Duplicate check failed, proceeding with cautious generation:', e?.message)
+    }
+
     // Generate focused test cases based on importance
     try {
       const { testType, enhancedContent } = enhanceContentForTesting(pageUrl, content, component)

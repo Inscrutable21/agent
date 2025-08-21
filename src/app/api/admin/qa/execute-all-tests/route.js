@@ -2,11 +2,14 @@ import { NextResponse } from 'next/server'
 import { prisma } from '../../../../../lib/prisma'
 import { executeTestCaseReal } from '../../../../../lib/testRunner'
 
+export const runtime = 'nodejs'
+
 export async function POST(request) {
   try {
     // Read optional concurrency from request body (defaults to 5, capped 1..10)
     const body = request ? await request.json().catch(() => ({})) : {}
     const concurrency = Math.max(1, Math.min(10, Number(body?.concurrency) || 5))
+    const perTestTimeoutMs = Math.max(5000, Number(process.env.QA_TEST_TIMEOUT_MS) || 60000)
 
     // Get tests that are pending or running
     const testCases = await prisma.qATestCase.findMany({
@@ -58,70 +61,93 @@ export async function POST(request) {
       durationMs: 0,
       details: []
     }
-
+    
     // chunk helper
     const chunk = (arr, size) => (arr.length ? [arr.slice(0, size), ...chunk(arr.slice(size), size)] : [])
 
+    const withTimeout = (promise, ms) => {
+      let timeoutId
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`Test timed out after ${ms}ms`)), ms)
+      })
+      return Promise.race([promise.finally(() => clearTimeout(timeoutId)), timeoutPromise])
+    }
+
     for (const batch of chunk(testCases, concurrency)) {
-      const runs = await Promise.allSettled(
+      const runs = await Promise.all(
         batch.map(async (testCase) => {
           const started = Date.now()
-          const result = await executeTestCaseReal(testCase)
+          try {
+            const result = await withTimeout(executeTestCaseReal(testCase), perTestTimeoutMs)
 
-          // Persist result
-          await prisma.qATestResult.create({
-            data: {
-              testCaseId: testCase.id,
-              status: result.status,
-              duration: result.duration,
-              errors: result.errors,
-              screenshots: [],
-              logs: result.logs
-            }
-          })
-
-          // Update test status and metadata
-          await prisma.qATestCase.update({
-            where: { id: testCase.id },
-            data: {
-              status: result.status,
-              metadata: {
-                ...(testCase && typeof testCase.metadata === 'object' && testCase.metadata ? testCase.metadata : {}),
-                lastExecuted: new Date().toISOString(),
-                executionCount: ((testCase?.metadata?.executionCount ?? 0) + 1)
+            // Persist result
+            await prisma.qATestResult.create({
+              data: {
+                testCaseId: testCase.id,
+                status: result.status,
+                duration: result.duration,
+                errors: result.errors,
+                screenshots: [],
+                logs: result.logs
               }
-            }
-          })
+            })
 
-          const ended = Date.now()
-          return {
-            testId: testCase.testId,
-            title: testCase.title,
-            status: result.status,
-            executionTime: `${ended - started}ms`,
-            startedAt: new Date(started).toISOString(),
-            endedAt: new Date(ended).toISOString()
+            // Update test status and metadata
+            await prisma.qATestCase.update({
+              where: { id: testCase.id },
+              data: {
+                status: result.status,
+                metadata: {
+                  ...(testCase && typeof testCase.metadata === 'object' && testCase.metadata ? testCase.metadata : {}),
+                  lastExecuted: new Date().toISOString(),
+                  executionCount: ((testCase?.metadata?.executionCount ?? 0) + 1)
+                }
+              }
+            })
+
+            const ended = Date.now()
+            return {
+              testId: testCase.testId,
+              title: testCase.title,
+              status: result.status,
+              executionTime: `${ended - started}ms`,
+              startedAt: new Date(started).toISOString(),
+              endedAt: new Date(ended).toISOString()
+            }
+          } catch (e) {
+            // Ensure stuck tests are marked as error
+            await prisma.qATestCase.update({
+              where: { id: testCase.id },
+              data: {
+                status: 'error',
+                metadata: {
+                  ...(testCase && typeof testCase.metadata === 'object' && testCase.metadata ? testCase.metadata : {}),
+                  lastExecuted: new Date().toISOString(),
+                  executionCount: ((testCase?.metadata?.executionCount ?? 0) + 1),
+                  lastError: e?.message || 'Unknown execution error'
+                }
+              }
+            })
+
+            const ended = Date.now()
+            return {
+              testId: testCase.testId,
+              title: testCase.title,
+              status: 'error',
+              error: e?.message || 'Unknown execution error',
+              executionTime: `${ended - started}ms`,
+              startedAt: new Date(started).toISOString(),
+              endedAt: new Date(ended).toISOString()
+            }
           }
         })
       )
 
-      for (const r of runs) {
-        if (r.status === 'fulfilled') {
-          const d = r.value
-          results.executed++
-          if (d.status === 'passed') results.passed++
-          if (d.status === 'failed') results.failed++
-          results.details.push(d)
-        } else {
-          results.executed++
-          results.failed++
-          results.details.push({
-            testId: 'unknown',
-            title: 'Execution error',
-            status: 'error',
-            error: r.reason?.message || 'Unknown error'
-          })
-        }
+      for (const d of runs) {
+        results.executed++
+        if (d.status === 'passed') results.passed++
+        if (d.status === 'failed' || d.status === 'error') results.failed++
+        results.details.push(d)
       }
     }
 

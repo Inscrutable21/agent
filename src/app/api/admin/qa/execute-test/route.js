@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '../../../../../lib/prisma'
 import { executeTestCaseReal } from '../../../../../lib/testRunner'
 
+export const runtime = 'nodejs'
+
 export async function POST(request) {
   try {
     const { testId } = await request.json()
@@ -14,8 +16,27 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Test case not found' }, { status: 404 })
     }
     
-    // Run real HTTP-based execution
-    const result = await executeTestCaseReal(testCase)
+    // Run real execution with timeout
+    let result
+    try {
+      const perTestTimeoutMs = Math.max(5000, Number(process.env.QA_TEST_TIMEOUT_MS) || 60000)
+      const withTimeout = (promise, ms) => {
+        let timeoutId
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error(`Test timed out after ${ms}ms`)), ms)
+        })
+        return Promise.race([promise.finally(() => clearTimeout(timeoutId)), timeoutPromise])
+      }
+      result = await withTimeout(executeTestCaseReal(testCase), perTestTimeoutMs)
+    } catch (e) {
+      // Ensure failure is captured rather than throwing
+      result = {
+        status: 'error',
+        duration: 0,
+        errors: [{ message: e?.message || 'Execution error' }],
+        logs: [{ type: 'error', message: e?.message || 'Execution error' }]
+      }
+    }
 
     // Save result
     const saved = await prisma.qATestResult.create({
@@ -37,7 +58,8 @@ export async function POST(request) {
         metadata: {
           ...(testCase.metadata || {}),
           lastExecuted: new Date().toISOString(),
-          executionCount: ((testCase?.metadata?.executionCount ?? 0) + 1)
+          executionCount: ((testCase?.metadata?.executionCount ?? 0) + 1),
+          lastError: result.status !== 'passed' ? (result.errors?.[0]?.message || 'Execution failure') : undefined
         }
       }
     })

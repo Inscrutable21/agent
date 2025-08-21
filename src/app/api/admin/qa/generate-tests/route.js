@@ -12,6 +12,19 @@ export async function POST(request) {
     
     console.log(`🎯 Generating ${maxTests} ${focused ? 'focused' : 'comprehensive'} tests for ${component}`)
     
+    // Skip generation if tests already exist for this page
+    if (pageUrl) {
+      const existingCount = await prisma.qATestCase.count({ where: { pageUrl } })
+      if (existingCount > 0) {
+        return NextResponse.json({
+          success: true,
+          generated: 0,
+          message: 'Tests already exist for this pageUrl. Skipping generation.',
+          testCases: []
+        })
+      }
+    }
+    
     const testCases = await generateTestCases(pageUrl, content, component, testType, maxTests, focused)
     
     // Save test cases to database
